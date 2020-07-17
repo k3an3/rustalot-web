@@ -1,5 +1,5 @@
 [package]
-name = "rust_http"
+name = "rustalot"
 version = "0.1.0"
 authors = ["Keane O'Kelley <me@keane.space>"]
 edition = "2018"

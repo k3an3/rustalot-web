@@ -6,40 +6,50 @@ use std::fs;
 use std::net::Shutdown::Both;
 use std::collections::HashMap;
 use percent_encoding::percent_decode_str;
+use std::error::Error;
 
 pub type HttpStatus = (u16, &'static str);
 
 pub const HTTP_404: HttpStatus = (404, "File Not Found");
 pub const HTTP_400: HttpStatus = (400, "Bad Request");
 pub const HTTP_200: HttpStatus = (200, "OK");
+pub const HTTP_500: HttpStatus = (500, "Internal Server Error");
 
-pub type Handler = fn(&HTTPRequest) -> (String, HttpStatus);
+pub type RouteResult = Result<(String, HttpStatus), Box<dyn Error>>;
+pub type Handler = fn(&HTTPRequest) -> RouteResult;
 
 pub struct HTTPRequest {
-    method: String,
-    path: String,
-    proto: String,
-    headers: HashMap<String, String>,
-    params: HashMap<String, String>,
-    data: HashMap<String, String>,
+    pub method: String,
+    pub path: String,
+    pub proto: String,
+    pub headers: HashMap<String, String>,
+    pub params: HashMap<String, String>,
+    pub data: HashMap<String, String>,
 }
 
 lazy_static! {
     static ref HTTP_VERSION_REGEX: Regex = Regex::new(r"^HTTP/[\d]\.[\d]$").unwrap();
 }
 
-fn default_route_404(_request: &HTTPRequest) -> (String, HttpStatus) {
-    (gen_http_error(HTTP_404), HTTP_404)
+fn router_404(_request: &HTTPRequest) -> RouteResult {
+    Ok((gen_http_error(HTTP_404), HTTP_404))
+}
+
+fn router_500(_request: &HTTPRequest) -> RouteResult {
+    Ok((gen_http_error(HTTP_500), HTTP_500))
 }
 
 pub fn load_html(name: &str) {
     fs::read_to_string(name).expect("HTML file not found!!!");
 }
 
+
 pub fn router(routes: &HashMap<String, Handler>, request: &HTTPRequest) -> (String, HttpStatus) {
     return routes.get(&request.path).unwrap_or_else(|| {
-        &(default_route_404 as fn(&HTTPRequest) -> (String, HttpStatus))
-    })(request);
+        &(router_404 as fn(&HTTPRequest) -> RouteResult)
+    })(request).unwrap_or_else(|_| {
+        (gen_http_error(HTTP_500), HTTP_500)
+    });
 }
 
 pub fn validate_request(line: &str) -> Result<HTTPRequest, String> {

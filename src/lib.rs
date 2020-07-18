@@ -5,8 +5,7 @@ use lazy_static::lazy_static;
 use std::net::Shutdown::Both;
 use std::collections::HashMap;
 use std::error::Error;
-use crate::util::{gen_http_error, walk_params, split_string, get_client_addr, log};
-use std::ops::Index;
+pub use crate::util::{gen_http_error, walk_params, split_string, get_client_addr, log};
 
 mod util;
 
@@ -14,6 +13,7 @@ mod util;
 pub type HttpStatus = (u16, &'static str);
 
 pub const HTTP_404: HttpStatus = (404, "File Not Found");
+pub const HTTP_405: HttpStatus = (405, "Method Not Supported");
 pub const HTTP_400: HttpStatus = (400, "Bad Request");
 pub const HTTP_200: HttpStatus = (200, "OK");
 pub const HTTP_500: HttpStatus = (500, "Internal Server Error");

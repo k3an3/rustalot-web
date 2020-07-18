@@ -5,7 +5,7 @@ use lazy_static::lazy_static;
 use std::net::Shutdown::Both;
 use std::collections::HashMap;
 use std::error::Error;
-pub use crate::util::{gen_http_error, walk_params, split_string, get_client_addr, log};
+pub use crate::util::{gen_http_error, walk_params, split_string, get_client_addr, log, load_html};
 
 mod util;
 

@@ -2,11 +2,14 @@ use std::net::{TcpStream, TcpListener};
 use std::io::{Read, Write};
 use regex::Regex;
 use lazy_static::lazy_static;
-use std::fs;
 use std::net::Shutdown::Both;
 use std::collections::HashMap;
-use percent_encoding::percent_decode_str;
 use std::error::Error;
+use crate::util::{gen_http_error, walk_params, split_string, get_client_addr, log};
+use std::ops::Index;
+
+mod util;
+
 
 pub type HttpStatus = (u16, &'static str);
 
@@ -34,15 +37,6 @@ lazy_static! {
 fn router_404(_request: &HTTPRequest) -> RouteResult {
     Ok((gen_http_error(HTTP_404), HTTP_404))
 }
-
-fn router_500(_request: &HTTPRequest) -> RouteResult {
-    Ok((gen_http_error(HTTP_500), HTTP_500))
-}
-
-pub fn load_html(name: &str) {
-    fs::read_to_string(name).expect("HTML file not found!!!");
-}
-
 
 pub fn router(routes: &HashMap<String, Handler>, request: &HTTPRequest) -> (String, HttpStatus) {
     return routes.get(&request.path).unwrap_or_else(|| {
@@ -78,18 +72,6 @@ pub fn http_response(mut stream: &TcpStream, status: HttpStatus, resp_data: &str
     Ok(())
 }
 
-pub fn get_client_addr(stream: &TcpStream) -> String {
-    stream.peer_addr().unwrap().to_string()
-}
-
-fn log(addr: String, line: &str, err: HttpStatus, user_agent: &String) {
-    println!("{} - \"{}\" {} \"{}\"", addr, line, err.0, user_agent);
-}
-
-fn gen_http_error(err: HttpStatus) -> String {
-    format!("<html><h1>{}</h1></html>", err.1)
-}
-
 fn handle_error(stream: &TcpStream, err: HttpStatus) {
     http_response(&stream, err,&gen_http_error(err)).unwrap();
 }
@@ -107,18 +89,19 @@ pub fn parse_headers(request_buf: String, request: &mut HTTPRequest) -> usize {
     0
 }
 
-fn walk_params(data: &str, map: &mut HashMap<String, String>) {
-    for pair in data.split("&") {
-        let s: Vec<&str> = pair.split("=").collect();
-        if s.len() > 1 {
-            map.insert(s[0].to_string(), percent_decode_str(s[1]).decode_utf8_lossy().to_string());
-        }
+fn parse_request(request: &mut HTTPRequest, body: &str) {
+    let mut path = request.path.clone();
+    let mut params = "";
+    if request.path.find("?").is_some() {
+        path = split_string(&request.path, "?", 0).to_string();
+        params = split_string(&request.path, "?", 1);
     }
-}
-
-fn parse_request(request: &mut HTTPRequest, path: &str, body: &str) {
-    walk_params(path, &mut request.params);
+    if params.find("#").is_some() {
+        params = split_string(params, "#", 0) ;
+    }
+    walk_params(params, &mut request.params);
     walk_params(body, &mut request.data);
+    request.path = path
 }
 
 pub fn handle_request(mut stream: TcpStream, routes: HashMap<String, Handler>) {
@@ -142,7 +125,7 @@ pub fn handle_request(mut stream: TcpStream, routes: HashMap<String, Handler>) {
     });
     let body_offset = parse_headers(request_buf.to_string(), &mut request);
     let request_body = request_buf.lines().collect::<Vec<&str>>()[body_offset..].join("");
-    parse_request(&mut request, first_line.split(" ").collect::<Vec<&str>>()[1], &request_body);
+    parse_request(&mut request,&request_body);
 
     let (resp_body, code) = router(&routes, &request);
     log(get_client_addr(&stream), first_line, code, &request.headers.get("user-agent").unwrap().to_string());

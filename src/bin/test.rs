@@ -1,22 +1,25 @@
 use std::collections::HashMap;
-use crate::server::{HTTPRequest, start_server, Handler, HttpStatus, HTTP_200, RouteResult};
-use std::error::Error;
-use core::fmt;
-use std::io::ErrorKind;
-use std::sync::mpsc::RecvError;
+use rustalot::{HTTPRequest, start_server, Handler, HTTP_200, RouteResult};
 
-mod server;
 
-fn index(request: &HTTPRequest) -> RouteResult {
+fn index(_request: &HTTPRequest) -> RouteResult {
     Ok(("<html><h1>IT WORKS!!!</h1></html>".to_string(), HTTP_200))
 }
 
 fn params(request: &HTTPRequest) -> RouteResult {
-    Ok((format!("Test param is {}", request.params.get("test").ok_or(0).unwrap().to_string()), HTTP_200))
+    for (key, value) in &request.params {
+        println!("{}: {}", key, value);
+    }
+    let opt = request.params.get("test");
+    if opt.is_none() {
+        return Err("")?;
+    }
+    println!("Made it here");
+    Ok((format!("<html><p><b>Test param:</b>{}</p></html>", opt.unwrap().to_string()), HTTP_200))
 }
 
 fn error(_request: &HTTPRequest) -> RouteResult {
-    Err("Test error")?
+    Err("")?
 }
 
 fn main() {

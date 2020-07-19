@@ -11,3 +11,11 @@ threadpool = "1.8.1"
 regex = "1"
 lazy_static = "1.4.0"
 percent-encoding = "2.1.0"
+
+[lib]
+name = "rustalot"
+path = "src/lib.rs"
+
+[[bin]]
+name = "rustalot_test"
+path = "src/bin/test.rs"

@@ -1,34 +1,42 @@
 use std::collections::HashMap;
-use rustalot::{HTTPRequest, start_server, Handler, HTTP_200, RouteResult, gen_http_error, HTTP_405};
+use rustalot::{HTTPRequest, start_server, Handler, HTTPResult, gen_http_error, HTTP_405, HTTPResponse};
 
 
-fn index(_request: &HTTPRequest) -> RouteResult {
-    Ok(("<html><h1>IT WORKS!!!</h1></html>".to_string(), HTTP_200))
+fn index(_request: &HTTPRequest) -> HTTPResult {
+    let mut response = HTTPResponse::new();
+    response.body = "<html><h1>IT WORKS!!!</h1></html>".to_string();
+    Ok(response)
 }
 
-fn get(request: &HTTPRequest) -> RouteResult {
+fn get(request: &HTTPRequest) -> HTTPResult {
+    let mut response = HTTPResponse::new();
     if request.method == "GET" {
         let opt = request.params.get("test");
         if opt.is_none() {
             return Err("")?;
         }
-        return Ok((format!("<html><p><b>Test param:</b>{}</p></html>", opt.unwrap().to_string()), HTTP_200));
+        response.body = format!("<html><p><b>Test param:</b>{}</p></html>", opt.unwrap().to_string());
+        return Ok(response);
     }
-    Ok((gen_http_error(HTTP_405), HTTP_405))
+    gen_http_error(HTTP_405, &mut response);
+    Ok(response)
 }
 
-fn post(request: &HTTPRequest) -> RouteResult {
+fn post(request: &HTTPRequest) -> HTTPResult {
+    let mut response = HTTPResponse::new();
     if request.method == "POST" {
         let opt = request.data.get("test");
         if opt.is_none() {
             return Err("")?;
         }
-        return Ok((format!("<html><p><b>Test param:</b>{}</p></html>", opt.unwrap().to_string()), HTTP_200));
+        response.body = format!("<html><p><b>Test param:</b>{}</p></html>", opt.unwrap().to_string());
+        return Ok(response);
     }
-    return Ok((gen_http_error(HTTP_405), HTTP_405))
+    gen_http_error(HTTP_405, &mut response);
+    Ok(response)
 }
 
-fn error(_request: &HTTPRequest) -> RouteResult {
+fn error(_request: &HTTPRequest) -> HTTPResult {
     Err("")?
 }
 

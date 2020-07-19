@@ -10,16 +10,16 @@ pub use crate::util::{gen_http_error, walk_params, split_string, get_client_addr
 mod util;
 
 
-pub type HttpStatus = (u16, &'static str);
+pub const HTTP_404: HTTPStatus = (404, "File Not Found");
+pub const HTTP_405: HTTPStatus = (405, "Method Not Supported");
+pub const HTTP_400: HTTPStatus = (400, "Bad Request");
+pub const HTTP_200: HTTPStatus = (200, "OK");
+pub const HTTP_500: HTTPStatus = (500, "Internal Server Error");
 
-pub const HTTP_404: HttpStatus = (404, "File Not Found");
-pub const HTTP_405: HttpStatus = (405, "Method Not Supported");
-pub const HTTP_400: HttpStatus = (400, "Bad Request");
-pub const HTTP_200: HttpStatus = (200, "OK");
-pub const HTTP_500: HttpStatus = (500, "Internal Server Error");
+pub type HTTPResult = Result<HTTPResponse, Box<dyn Error>>;
+pub type Handler = fn(&HTTPRequest) -> HTTPResult;
+pub type HTTPStatus = (u16, &'static str);
 
-pub type RouteResult = Result<(String, HttpStatus), Box<dyn Error>>;
-pub type Handler = fn(&HTTPRequest) -> RouteResult;
 
 pub struct HTTPRequest {
     pub method: String,
@@ -28,29 +28,73 @@ pub struct HTTPRequest {
     pub headers: HashMap<String, String>,
     pub params: HashMap<String, String>,
     pub data: HashMap<String, String>,
+    pub valid: bool,
+}
+
+pub struct HTTPResponse {
+    pub status: HTTPStatus,
+    pub headers: HashMap<String, String>,
+    pub body: String,
+}
+
+impl HTTPRequest {
+    fn new(method: String, path: String, proto: String) -> HTTPRequest {
+        HTTPRequest {
+            method,
+            path,
+            proto,
+            headers: HashMap::new(),
+            params: HashMap::new(),
+            data: HashMap::new(),
+            valid: true,
+        }
+    }
+}
+
+impl HTTPResponse {
+    pub fn new() -> HTTPResponse {
+        HTTPResponse{status: HTTP_200, headers: HashMap::new(), body: String::new()}
+    }
+
+    fn send(&mut self, mut stream: &TcpStream) -> Result<(), ()> {
+        self.headers.insert("Server".to_string(), "Rustalot/0.1.0".to_string());
+        self.headers.insert("Content-Length".to_string(), self.body.len().to_string());
+        let mut data = format!("HTTP/1.1 {} {}\r\n", self.status.0, self.status.1);
+        for (key, value) in &self.headers {
+            data.push_str(&format!{"{}: {}\r\n", key, value});
+        }
+        data.push_str("\r\n");
+        data.push_str(&self.body);
+        stream.write(data.as_bytes()).expect("Failed to write HTTP response.");
+        stream.flush().unwrap();
+        Ok(())
+    }
 }
 
 lazy_static! {
     static ref HTTP_VERSION_REGEX: Regex = Regex::new(r"^HTTP/[\d]\.[\d]$").unwrap();
 }
 
-fn router_404(_request: &HTTPRequest) -> RouteResult {
-    Ok((gen_http_error(HTTP_404), HTTP_404))
+fn router_404(_request: &HTTPRequest) -> HTTPResult {
+    let mut response = HTTPResponse::new();
+    gen_http_error(HTTP_404, &mut response);
+    Ok(response)
 }
 
-pub fn router(routes: &HashMap<String, Handler>, request: &HTTPRequest) -> (String, HttpStatus) {
+pub fn router(routes: &HashMap<String, Handler>, request: &HTTPRequest) -> HTTPResponse {
+
     return routes.get(&request.path).unwrap_or_else(|| {
-        &(router_404 as fn(&HTTPRequest) -> RouteResult)
+        &(router_404 as fn(&HTTPRequest) -> HTTPResult)
     })(request).unwrap_or_else(|_| {
-        (gen_http_error(HTTP_500), HTTP_500)
+        let mut response = HTTPResponse::new();
+        gen_http_error(HTTP_500, &mut response);
+        response
     });
 }
 
 pub fn validate_request(line: &str) -> Result<HTTPRequest, String> {
     let v: Vec<&str> = line.split_whitespace().collect();
-    let request = HTTPRequest{method: v[0].to_string(), path: v[1].to_string(),
-        proto: v[2].to_string(), headers: HashMap::new(), params: HashMap::new(),
-        data: HashMap::new()};
+    let request = HTTPRequest::new(v[0].to_string(), v[1].to_string(), v[2].to_string());
     if !vec!["GET", "POST"].iter().any(|x| x == &request.method) {
         return Err(format!("Invalid request method `{}'", &request.method));
     }
@@ -63,17 +107,11 @@ pub fn validate_request(line: &str) -> Result<HTTPRequest, String> {
     Ok(request)
 }
 
-pub fn http_response(mut stream: &TcpStream, status: HttpStatus, resp_data: &str) -> Result<(), ()> {
-    let mut data = format!("HTTP/1.1 {} {}", status.0, status.1);
-    data.push_str("\r\nServer: Rustalot/0.1.0\r\n\r\n");
-    data.push_str(resp_data);
-    stream.write(data.as_bytes()).expect("Failed to write HTTP response.");
-    stream.flush().unwrap();
-    Ok(())
-}
 
-fn handle_error(stream: &TcpStream, err: HttpStatus) {
-    http_response(&stream, err,&gen_http_error(err)).unwrap();
+fn handle_error(stream: &TcpStream, err: HTTPStatus) {
+    let mut response = HTTPResponse::new();
+    gen_http_error(err, &mut response);
+    response.send(&stream).expect("Failed to send error response.");
 }
 
 pub fn parse_headers(request_buf: String, request: &mut HTTPRequest) -> usize {
@@ -109,29 +147,25 @@ pub fn handle_request(mut stream: TcpStream, routes: HashMap<String, Handler>) {
     stream.read(&mut buf).unwrap();
     let request_buf = String::from_utf8_lossy(&buf);
     let first_line = request_buf.lines().next().unwrap();
-    let mut code: HttpStatus = HTTP_200;
+    let mut code = HTTP_200;
 
     let mut request = validate_request(first_line).unwrap_or_else(|_| {
         handle_error(&stream, HTTP_400);
         code = HTTP_400;
-        return HTTPRequest {
-            method: "".to_string(),
-            path: "".to_string(),
-            proto: "".to_string(),
-            headers: HashMap::new(),
-            params: HashMap::new(),
-            data: HashMap::new(),
-        };
+        let mut r = HTTPRequest::new("".to_string(), "".to_string(), "".to_string());
+        r.valid = false;
+        r
     });
     let body_offset = parse_headers(request_buf.to_string(), &mut request);
     let request_body = request_buf.lines().collect::<Vec<&str>>()[body_offset..].join("");
     parse_request(&mut request,&request_body);
 
-    let (resp_body, code) = router(&routes, &request);
-    log(get_client_addr(&stream), first_line, code, &request.headers.get("user-agent").unwrap().to_string());
-    http_response(&stream, code, &resp_body).unwrap();
-
-    stream.shutdown(Both).unwrap();
+    let mut response = router(&routes, &request);
+    log(get_client_addr(&stream), first_line, response.status, &request.headers.get("user-agent").unwrap().to_string());
+    if request.valid {
+        response.send(&stream).expect("Failed to send response body.");
+    }
+    stream.shutdown(Both).expect("Failed to close socket.");
 }
 
 pub fn start_server(bind_addr: &str, port: u16, routes: HashMap<String, Handler>) -> std::io::Result<()> {

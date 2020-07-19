@@ -2,10 +2,11 @@ use std::fs;
 use std::net::TcpStream;
 use percent_encoding::percent_decode_str;
 use std::collections::HashMap;
-use crate::HttpStatus;
+use crate::{HTTPStatus, HTTPResponse};
 
-pub fn gen_http_error(err: HttpStatus) -> String {
-    format!("<html><h1>{}</h1></html>", err.1)
+pub fn gen_http_error(err: HTTPStatus, response: &mut HTTPResponse) {
+    response.body = format!("<html><h1>{}</h1></html>", err.1);
+    response.status = err;
 }
 
 pub fn walk_params(data: &str, map: &mut HashMap<String, String>) {
@@ -17,8 +18,8 @@ pub fn walk_params(data: &str, map: &mut HashMap<String, String>) {
     }
 }
 
-pub fn load_html(name: &str) {
-    fs::read_to_string(name).expect("HTML file not found!!!");
+pub fn load_html(name: &str) -> String {
+    fs::read_to_string(format!("templates/{}", name)).expect("HTML file not found!!!")
 }
 
 pub fn split_string<'a>(s: &'a str, split: &str, offset: usize) -> &'a str {
@@ -29,7 +30,7 @@ pub fn get_client_addr(stream: &TcpStream) -> String {
     stream.peer_addr().unwrap().to_string()
 }
 
-pub fn log(addr: String, line: &str, err: HttpStatus, user_agent: &String) {
+pub fn log(addr: String, line: &str, err: HTTPStatus, user_agent: &String) {
     println!("{} - \"{}\" {} \"{}\"", addr, line, err.0, user_agent);
 }
 

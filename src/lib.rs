@@ -7,6 +7,7 @@ use std::collections::HashMap;
 use std::error::Error;
 pub use crate::util::{gen_http_error, walk_params, split_string, get_client_addr, log, load_html};
 use boolinator::Boolinator;
+use crate::util::{load_static, fmt_http_error};
 
 mod util;
 
@@ -46,7 +47,9 @@ pub struct HTTPServer {
 
 impl HTTPServer {
     pub fn new(bind_addr: String, bind_port: u16) -> HTTPServer {
-        HTTPServer{bind_addr, bind_port, routes: vec![]}
+        let mut h = HTTPServer{bind_addr, bind_port, routes: vec![]};
+        h.add_route("/static/.*".to_string(), serve_static);
+        h
     }
 
     pub fn add_route(&mut self, path: String, func: Handler) {
@@ -70,6 +73,14 @@ impl HTTPServer {
         }
         Ok(())
     }
+}
+
+fn serve_static(request: &HTTPRequest, mut response: HTTPResponse) -> HTTPResult {
+    response.body = load_static(split_string(&request.path, "/static/", 1)).unwrap_or_else(|_| {
+        response.status = HTTP_404;
+        return fmt_http_error(HTTP_404);
+    });
+    Ok(response)
 }
 
 pub fn router(request: &HTTPRequest, routes: Vec<(Regex, Handler)>) -> HTTPResponse {

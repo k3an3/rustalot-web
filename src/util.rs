@@ -4,9 +4,15 @@ use percent_encoding::percent_decode_str;
 use std::collections::HashMap;
 use crate::{HTTPStatus, HTTPResponse};
 use std::path::Path;
+use std::error::Error;
+
+
+pub fn fmt_http_error(err: HTTPStatus) -> String {
+    format!("<html><h1>{}</h1></html>", err.1)
+}
 
 pub fn gen_http_error(err: HTTPStatus, response: &mut HTTPResponse) {
-    response.body = format!("<html><h1>{}</h1></html>", err.1);
+    response.body = fmt_http_error(err);
     response.status = err;
 }
 
@@ -19,12 +25,12 @@ pub fn walk_params(data: &str, map: &mut HashMap<String, String>) {
     }
 }
 
-pub fn load_html(name: &str) -> String {
-    fs::read_to_string(Path::new("templates").join(name)).expect("HTML file not found!!!")
+pub fn load_html(name: &str) -> Result<String, Box<dyn Error>> {
+    Ok(fs::read_to_string(Path::new("templates").join(name))?)
 }
 
-pub fn load_static(name: &str) -> String {
-    fs::read_to_string(Path::new("static").join(name)).expect("Static file not found!!!")
+pub fn load_static(name: &str) -> Result<String, Box<dyn Error>> {
+    Ok(fs::read_to_string(Path::new("static").join(name))?)
 }
 
 pub fn split_string<'a>(s: &'a str, split: &str, offset: usize) -> &'a str {

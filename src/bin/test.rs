@@ -36,9 +36,15 @@ fn error(_request: &HTTPRequest, mut _response: HTTPResponse) -> HTTPResult {
     Err("")?
 }
 
+fn regex_test(_request: &HTTPRequest, mut response: HTTPResponse) -> HTTPResult {
+    response.body = "VALID".to_string();
+    Ok(response)
+}
+
 fn main() {
     let mut server = HTTPServer::new("127.0.0.1".to_string(), 8080);
     server.add_route("/".to_string(), index);
+    server.add_route("/regex.*".to_string(), regex_test);
     server.add_route("/error".to_string(), error);
     server.add_route("/params".to_string(), get);
     server.add_route("/post".to_string(), post);

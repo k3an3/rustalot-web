@@ -6,6 +6,7 @@ use std::net::Shutdown::Both;
 use std::collections::HashMap;
 use std::error::Error;
 pub use crate::util::{gen_http_error, walk_params, split_string, get_client_addr, log, load_html};
+use boolinator::Boolinator;
 
 mod util;
 
@@ -40,16 +41,16 @@ pub struct HTTPResponse {
 pub struct HTTPServer {
     pub bind_addr: String,
     pub bind_port: u16,
-    pub routes: HashMap<String, Handler>
+    pub routes: Vec<(Regex, Handler)>
 }
 
 impl HTTPServer {
     pub fn new(bind_addr: String, bind_port: u16) -> HTTPServer {
-        HTTPServer{bind_addr, bind_port, routes: HashMap::new()}
+        HTTPServer{bind_addr, bind_port, routes: vec![]}
     }
 
     pub fn add_route(&mut self, path: String, func: Handler) {
-        self.routes.insert(path, func);
+        self.routes.push((Regex::new(&format!("^{}$", path)).expect(&format!("Invalid regular expression: {}", path)), func));
     }
 
     pub fn start_server(&mut self) -> std::io::Result<()> {
@@ -71,11 +72,11 @@ impl HTTPServer {
     }
 }
 
-pub fn router(request: &HTTPRequest, routes: HashMap<String, Handler>) -> HTTPResponse {
+pub fn router(request: &HTTPRequest, routes: Vec<(Regex, Handler)>) -> HTTPResponse {
     let mut response = HTTPResponse::new();
 
-    return routes.get(&request.path).unwrap_or_else(|| {
-        &(router_404 as fn(&HTTPRequest, HTTPResponse) -> HTTPResult)
+    return routes.iter().find_map(|x| x.0.is_match(&request.path).as_some(x.1)).unwrap_or_else(|| {
+        router_404 as fn(&HTTPRequest, HTTPResponse) -> HTTPResult
     })(request, HTTPResponse::new()).unwrap_or_else(|_| {
         gen_http_error(HTTP_500, &mut response);
         response
@@ -126,7 +127,7 @@ fn router_404(_request: &HTTPRequest, mut response: HTTPResponse) -> HTTPResult 
     Ok(response)
 }
 
-pub fn handle_request(mut stream: TcpStream, routes: HashMap<String, Handler>) {
+pub fn handle_request(mut stream: TcpStream, routes: Vec<(Regex, Handler)>) {
     let mut buf= [0u8; 4096];
     stream.read(&mut buf).unwrap();
     let request_buf = String::from_utf8_lossy(&buf);

@@ -3,6 +3,7 @@ use std::net::TcpStream;
 use percent_encoding::percent_decode_str;
 use std::collections::HashMap;
 use crate::{HTTPStatus, HTTPResponse};
+use std::path::Path;
 
 pub fn gen_http_error(err: HTTPStatus, response: &mut HTTPResponse) {
     response.body = format!("<html><h1>{}</h1></html>", err.1);
@@ -19,7 +20,11 @@ pub fn walk_params(data: &str, map: &mut HashMap<String, String>) {
 }
 
 pub fn load_html(name: &str) -> String {
-    fs::read_to_string(format!("templates/{}", name)).expect("HTML file not found!!!")
+    fs::read_to_string(Path::new("templates").join(name)).expect("HTML file not found!!!")
+}
+
+pub fn load_static(name: &str) -> String {
+    fs::read_to_string(Path::new("static").join(name)).expect("Static file not found!!!")
 }
 
 pub fn split_string<'a>(s: &'a str, split: &str, offset: usize) -> &'a str {

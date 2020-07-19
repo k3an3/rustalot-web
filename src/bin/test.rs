@@ -1,15 +1,12 @@
-use std::collections::HashMap;
-use rustalot::{HTTPRequest, start_server, Handler, HTTPResult, gen_http_error, HTTP_405, HTTPResponse};
+use rustalot::{HTTPRequest, HTTPResult, gen_http_error, HTTP_405, HTTPResponse, HTTPServer};
 
 
-fn index(_request: &HTTPRequest) -> HTTPResult {
-    let mut response = HTTPResponse::new();
+fn index(_request: &HTTPRequest, mut response: HTTPResponse) -> HTTPResult {
     response.body = "<html><h1>IT WORKS!!!</h1></html>".to_string();
     Ok(response)
 }
 
-fn get(request: &HTTPRequest) -> HTTPResult {
-    let mut response = HTTPResponse::new();
+fn get(request: &HTTPRequest, mut response: HTTPResponse) -> HTTPResult {
     if request.method == "GET" {
         let opt = request.params.get("test");
         if opt.is_none() {
@@ -22,8 +19,7 @@ fn get(request: &HTTPRequest) -> HTTPResult {
     Ok(response)
 }
 
-fn post(request: &HTTPRequest) -> HTTPResult {
-    let mut response = HTTPResponse::new();
+fn post(request: &HTTPRequest, mut response: HTTPResponse) -> HTTPResult {
     if request.method == "POST" {
         let opt = request.data.get("test");
         if opt.is_none() {
@@ -36,17 +32,17 @@ fn post(request: &HTTPRequest) -> HTTPResult {
     Ok(response)
 }
 
-fn error(_request: &HTTPRequest) -> HTTPResult {
+fn error(_request: &HTTPRequest, mut _response: HTTPResponse) -> HTTPResult {
     Err("")?
 }
 
 fn main() {
-    let mut router: HashMap<String, Handler> = HashMap::new();
-    router.insert("/".to_string(), index);
-    router.insert("/error".to_string(), error);
-    router.insert("/params".to_string(), get);
-    router.insert("/post".to_string(), post);
+    let mut server = HTTPServer::new("127.0.0.1".to_string(), 8080);
+    server.add_route("/".to_string(), index);
+    server.add_route("/error".to_string(), error);
+    server.add_route("/params".to_string(), get);
+    server.add_route("/post".to_string(), post);
     println!("Starting server...");
-    start_server("127.0.0.1", 8080, router).expect("Something bad happened.");
+    server.start_server().expect("Something bad happened.");
     println!("Shutting down...");
 }

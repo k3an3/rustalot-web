@@ -17,7 +17,7 @@ pub const HTTP_200: HTTPStatus = (200, "OK");
 pub const HTTP_500: HTTPStatus = (500, "Internal Server Error");
 
 pub type HTTPResult = Result<HTTPResponse, Box<dyn Error>>;
-pub type Handler = fn(&HTTPRequest) -> HTTPResult;
+pub type Handler = fn(&HTTPRequest, HTTPResponse) -> HTTPResult;
 pub type HTTPStatus = (u16, &'static str);
 
 
@@ -36,6 +36,52 @@ pub struct HTTPResponse {
     pub headers: HashMap<String, String>,
     pub body: String,
 }
+
+pub struct HTTPServer {
+    pub bind_addr: String,
+    pub bind_port: u16,
+    pub routes: HashMap<String, Handler>
+}
+
+impl HTTPServer {
+    pub fn new(bind_addr: String, bind_port: u16) -> HTTPServer {
+        HTTPServer{bind_addr, bind_port, routes: HashMap::new()}
+    }
+
+    pub fn add_route(&mut self, path: String, func: Handler) {
+        self.routes.insert(path, func);
+    }
+
+    pub fn start_server(&mut self) -> std::io::Result<()> {
+        let bind = format!("{}:{}", self.bind_addr, self.bind_port);
+        let listener = TcpListener::bind(bind).expect("Failed to bind!");
+
+        let pool = threadpool::Builder::new()
+            .thread_name("http_worker".into())
+            .num_threads(5)
+            .build();
+
+        for stream in listener.incoming() {
+            let routes_copy = self.routes.clone();
+            pool.execute(move|| {
+                handle_request(stream.unwrap(), routes_copy);
+            });
+        }
+        Ok(())
+    }
+}
+
+pub fn router(request: &HTTPRequest, routes: HashMap<String, Handler>) -> HTTPResponse {
+    let mut response = HTTPResponse::new();
+
+    return routes.get(&request.path).unwrap_or_else(|| {
+        &(router_404 as fn(&HTTPRequest, HTTPResponse) -> HTTPResult)
+    })(request, HTTPResponse::new()).unwrap_or_else(|_| {
+        gen_http_error(HTTP_500, &mut response);
+        response
+    })
+}
+
 
 impl HTTPRequest {
     fn new(method: String, path: String, proto: String) -> HTTPRequest {
@@ -75,22 +121,37 @@ lazy_static! {
     static ref HTTP_VERSION_REGEX: Regex = Regex::new(r"^HTTP/[\d]\.[\d]$").unwrap();
 }
 
-fn router_404(_request: &HTTPRequest) -> HTTPResult {
-    let mut response = HTTPResponse::new();
+fn router_404(_request: &HTTPRequest, mut response: HTTPResponse) -> HTTPResult {
     gen_http_error(HTTP_404, &mut response);
     Ok(response)
 }
 
-pub fn router(routes: &HashMap<String, Handler>, request: &HTTPRequest) -> HTTPResponse {
+pub fn handle_request(mut stream: TcpStream, routes: HashMap<String, Handler>) {
+    let mut buf= [0u8; 4096];
+    stream.read(&mut buf).unwrap();
+    let request_buf = String::from_utf8_lossy(&buf);
+    let first_line = request_buf.lines().next().unwrap();
+    let mut code = HTTP_200;
 
-    return routes.get(&request.path).unwrap_or_else(|| {
-        &(router_404 as fn(&HTTPRequest) -> HTTPResult)
-    })(request).unwrap_or_else(|_| {
-        let mut response = HTTPResponse::new();
-        gen_http_error(HTTP_500, &mut response);
-        response
+    let mut request = validate_request(first_line).unwrap_or_else(|_| {
+        handle_error(&stream, HTTP_400);
+        code = HTTP_400;
+        let mut r = HTTPRequest::new("".to_string(), "".to_string(), "".to_string());
+        r.valid = false;
+        r
     });
+    let body_offset = parse_headers(request_buf.to_string(), &mut request);
+    let request_body = request_buf.lines().collect::<Vec<&str>>()[body_offset..].join("");
+    parse_request(&mut request,&request_body);
+
+    let mut response = router(&request, routes);
+    log(get_client_addr(&stream), first_line, response.status, &request.headers.get("user-agent").unwrap().to_string());
+    if request.valid {
+        response.send(&stream).expect("Failed to send response body.");
+    }
+    stream.shutdown(Both).expect("Failed to close socket.");
 }
+
 
 pub fn validate_request(line: &str) -> Result<HTTPRequest, String> {
     let v: Vec<&str> = line.split_whitespace().collect();
@@ -142,49 +203,4 @@ fn parse_request(request: &mut HTTPRequest, body: &str) {
     request.path = path
 }
 
-pub fn handle_request(mut stream: TcpStream, routes: HashMap<String, Handler>) {
-    let mut buf= [0u8; 4096];
-    stream.read(&mut buf).unwrap();
-    let request_buf = String::from_utf8_lossy(&buf);
-    let first_line = request_buf.lines().next().unwrap();
-    let mut code = HTTP_200;
 
-    let mut request = validate_request(first_line).unwrap_or_else(|_| {
-        handle_error(&stream, HTTP_400);
-        code = HTTP_400;
-        let mut r = HTTPRequest::new("".to_string(), "".to_string(), "".to_string());
-        r.valid = false;
-        r
-    });
-    let body_offset = parse_headers(request_buf.to_string(), &mut request);
-    let request_body = request_buf.lines().collect::<Vec<&str>>()[body_offset..].join("");
-    parse_request(&mut request,&request_body);
-
-    let mut response = router(&routes, &request);
-    log(get_client_addr(&stream), first_line, response.status, &request.headers.get("user-agent").unwrap().to_string());
-    if request.valid {
-        response.send(&stream).expect("Failed to send response body.");
-    }
-    stream.shutdown(Both).expect("Failed to close socket.");
-}
-
-pub fn start_server(bind_addr: &str, port: u16, routes: HashMap<String, Handler>) -> std::io::Result<()> {
-    let mut bind = bind_addr.to_string();
-    bind.push_str(":");
-    bind.push_str(&port.to_string());
-    let listener = TcpListener::bind(bind).expect("Failed to bind!");
-
-    let pool = threadpool::Builder::new()
-    .thread_name("http_worker".into())
-    .num_threads(5)
-    .build();
-
-    for stream in listener.incoming() {
-        let stream = stream.unwrap();
-        let routes_copy = routes.clone();
-        pool.execute(move|| {
-            handle_request(stream, routes_copy);
-        });
-    }
-    Ok(())
-}

@@ -3,7 +3,7 @@ use std::net::TcpStream;
 use percent_encoding::percent_decode_str;
 use std::collections::HashMap;
 use crate::{HTTPStatus, HTTPResponse};
-use std::path::Path;
+use std::path::{PathBuf};
 use std::error::Error;
 
 
@@ -25,12 +25,10 @@ pub fn walk_params(data: &str, map: &mut HashMap<String, String>) {
     }
 }
 
-pub fn load_html(name: &str) -> Result<String, Box<dyn Error>> {
-    Ok(fs::read_to_string(Path::new("templates").join(name))?)
-}
-
-pub fn load_static(name: &str) -> Result<String, Box<dyn Error>> {
-    Ok(fs::read_to_string(Path::new("static").join(name))?)
+pub fn load_static_file(name: &str) -> Result<String, Box<dyn Error>> {
+    let mut path = PathBuf::from("webroot");
+    path.push(name);
+    Ok(fs::read_to_string(path)?)
 }
 
 pub fn split_string<'a>(s: &'a str, split: &str, offset: usize) -> &'a str {

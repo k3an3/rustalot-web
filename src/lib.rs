@@ -5,9 +5,9 @@ use lazy_static::lazy_static;
 use std::net::Shutdown::Both;
 use std::collections::HashMap;
 use std::error::Error;
-pub use crate::util::{gen_http_error, walk_params, split_string, get_client_addr, log, load_html};
+pub use crate::util::{load_static_file, gen_http_error, walk_params, split_string, get_client_addr, log};
 use boolinator::Boolinator;
-use crate::util::{load_static, fmt_http_error};
+use crate::util::{fmt_http_error};
 
 mod util;
 
@@ -75,13 +75,15 @@ impl HTTPServer {
     }
 }
 
-fn serve_static(request: &HTTPRequest, mut response: HTTPResponse) -> HTTPResult {
-    response.body = load_static(split_string(&request.path, "/static/", 1)).unwrap_or_else(|_| {
+pub fn serve_static(request: &HTTPRequest, mut response: HTTPResponse) -> HTTPResult {
+    // Builtin request handler that will handle any requests for static files.
+    response.body = load_static_file(&request.path[1..]).unwrap_or_else(|_| {
         response.status = HTTP_404;
         return fmt_http_error(HTTP_404);
     });
     Ok(response)
 }
+
 
 pub fn router(request: &HTTPRequest, routes: Vec<(Regex, Handler)>) -> HTTPResponse {
     let mut response = HTTPResponse::new();

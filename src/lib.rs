@@ -1,12 +1,14 @@
-use std::net::{TcpStream, TcpListener};
-use std::io::{Read, Write};
+use boolinator::Boolinator;
 use regex::Regex;
 use lazy_static::lazy_static;
+
+use std::net::{TcpStream, TcpListener};
+use std::io::{Read, Write};
 use std::net::Shutdown::Both;
 use std::collections::HashMap;
 use std::error::Error;
+
 pub use crate::util::{fmt_http_error, load_static_file, gen_http_error, walk_params, split_string, get_client_addr, log};
-use boolinator::Boolinator;
 
 mod util;
 

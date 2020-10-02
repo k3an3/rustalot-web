@@ -13,10 +13,13 @@ pub use crate::util::{fmt_http_error, load_static_file, gen_http_error, walk_par
 mod util;
 
 
+pub const HTTP_200: HTTPStatus = (200, "OK");
+pub const HTTP_204: HTTPStatus = (204, "No Content");
+pub const HTTP_400: HTTPStatus = (400, "Bad Request");
+pub const HTTP_401: HTTPStatus = (401, "Unauthorized");
+pub const HTTP_403: HTTPStatus = (403, "Forbidden");
 pub const HTTP_404: HTTPStatus = (404, "File Not Found");
 pub const HTTP_405: HTTPStatus = (405, "Method Not Supported");
-pub const HTTP_400: HTTPStatus = (400, "Bad Request");
-pub const HTTP_200: HTTPStatus = (200, "OK");
 pub const HTTP_500: HTTPStatus = (500, "Internal Server Error");
 
 pub type HTTPResult = Result<HTTPResponse, Box<dyn Error>>;

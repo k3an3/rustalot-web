@@ -20,7 +20,7 @@ pub fn walk_params(data: &str, map: &mut HashMap<String, String>) {
     for pair in data.split("&") {
         let s: Vec<&str> = pair.split("=").collect();
         if s.len() > 1 {
-            map.insert(s[0].to_string(), percent_decode_str(s[1]).decode_utf8_lossy().to_string());
+            map.insert(s[0].to_string(), percent_decode_str(s[1]).decode_utf8_lossy().trim_end_matches(char::from(0)).to_string());
         }
     }
 }
